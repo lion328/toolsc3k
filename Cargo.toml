@@ -1,0 +1,8 @@
+[package]
+name = "toolsc3k"
+version = "0.1.0"
+authors = ["Waritnan Sookbuntherng <lion328@hotmail.co.th>"]
+
+[dependencies]
+byteorder = "1.2"
+clap = "2.32"
