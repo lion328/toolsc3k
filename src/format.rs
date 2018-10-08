@@ -2,7 +2,7 @@ use std::io::{self, Read};
 use error::*;
 use byteorder::{ReadBytesExt, LittleEndian as LE};
 
-pub static SC3K_FILE_HEADER_IDENTIFIER: &[u8] = &[0xD7, 0x81, 0xC3, 0x80];
+pub static IXF_FILE_HEADER_IDENTIFIER: &[u8] = &[0xD7, 0x81, 0xC3, 0x80];
 
 #[derive(Debug)]
 pub struct IXFFile<'a> {
@@ -24,8 +24,8 @@ impl<'a> IXFFile<'a> {
         let mut stream = io::Cursor::new(data);
         stream.read_exact(&mut ident)?;
 
-        if ident != SC3K_FILE_HEADER_IDENTIFIER {
-            return Err(Error::SC3KFile(format!("invalid header: {:x?}", ident)));
+        if ident != IXF_FILE_HEADER_IDENTIFIER {
+            return Err(Error::IXFFile(format!("invalid header: {:x?}", ident)));
         }
 
         let mut records = Vec::new();
@@ -47,7 +47,7 @@ impl<'a> IXFFile<'a> {
                     continue
                 }
 
-                return Err(Error::SC3KFile(
+                return Err(Error::IXFFile(
                     format!("record out of bounds: address 0x{:X?}, length 0x{:X?}, max: 0x{:X?}", address, length,
                         data.len() - 1)));
             }

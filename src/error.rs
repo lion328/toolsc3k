@@ -3,7 +3,7 @@ use std::{fmt, result, io};
 #[derive(Debug)]
 pub enum Error {
     IO(io::Error),
-    SC3KFile(String),
+    IXFFile(String),
 }
 
 impl fmt::Display for Error {
@@ -11,7 +11,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::IO(ref e) => write!(f, "io error: {}", e),
-            Error::SC3KFile(ref s) => write!(f, "sc3k format error: {}", s),
+            Error::IXFFile(ref s) => write!(f, "sc3k format error: {}", s),
         }
     }
 }
