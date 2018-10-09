@@ -5,19 +5,27 @@ pub mod error;
 pub mod format;
 
 use error::*;
-use std::fs;
-use std::fmt::Write;
+use std::fs::{self, File};
+use std::path::Path;
+use std::fmt::Write as WF;
+use std::io::Write as WI;
 use clap::{App, Arg, SubCommand};
 
 fn main() -> Result<()> {
     let matches = App::new("toolsc3k")
         .about("A tool for reading assets of SimCity 3000.")
-        .subcommand(SubCommand::with_name("dump_ixf")
+        .subcommand(SubCommand::with_name("dump-ixf")
             .about("Dump SC3K IXF file (.sc3, .DAT, etc.)")
             .arg(Arg::with_name("skip-bad")
                 .help("Skip bad record")
                 .long("skip-bad")
                 .short("b")
+            )
+            .arg(Arg::with_name("to-file")
+                .help("Dump into binary files")
+                .long("to-file")
+                .short("t")
+                .takes_value(true)
             )
             .arg(Arg::with_name("INPUT")
                 .help("The file to dump")
@@ -28,9 +36,10 @@ fn main() -> Result<()> {
         .get_matches();
 
     match matches.subcommand() {
-        ("dump_ixf", Some(sub_m)) => dump_ixf(
+        ("dump-ixf", Some(sub_m)) => dump_ixf(
             sub_m.value_of("INPUT").unwrap(),
-            sub_m.is_present("skip-bad")
+            sub_m.is_present("skip-bad"),
+            sub_m.value_of("to-file")
         )?,
         _ => println!("Unknown subcommand")
     }
@@ -38,11 +47,21 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dump_ixf(filename: &str, skip_bad: bool) -> Result<()> {
+fn dump_ixf(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result<()> {
     let vec = fs::read(filename)?;
     let sc3k = format::IXFFile::parse(&vec, skip_bad)?;
 
-    sc3k.records.iter().enumerate().for_each(|(i, r)| {
+    for (i, r) in sc3k.records.iter().enumerate() {
+        if let Some(ref dump_dir) = binary_dump {
+            let path = Path::new(dump_dir).join(format!("{:X?}/{:X?}/{:X?}.bin", r.type_id, r.group_id, r.instance_id));
+            fs::create_dir_all(path.parent().unwrap())?;
+
+            let mut file = File::create(path)?;
+            file.write_all(r.body)?;
+
+            continue;
+        }
+
         let mut out = String::new();
         writeln!(out, "Record number: {}", i);
         writeln!(out, "Type ID: 0x{:X?}", r.type_id);
@@ -50,7 +69,7 @@ fn dump_ixf(filename: &str, skip_bad: bool) -> Result<()> {
         writeln!(out, "Instance ID: 0x{:X?}", r.instance_id);
         
         println!("{}Body:\n{}\n", out, dump_hex(r.body));
-    });
+    }
 
     Ok(())
 }
