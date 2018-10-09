@@ -4,6 +4,7 @@ use std::{fmt, result, io};
 pub enum Error {
     IO(io::Error),
     IXFFile(String),
+    DBPFCompression(String),
 }
 
 impl fmt::Display for Error {
@@ -12,6 +13,7 @@ impl fmt::Display for Error {
         match *self {
             Error::IO(ref e) => write!(f, "io error: {}", e),
             Error::IXFFile(ref s) => write!(f, "sc3k format error: {}", s),
+            Error::DBPFCompression(ref s) => write!(f, "dbpf compression error: {}", s),
         }
     }
 }
