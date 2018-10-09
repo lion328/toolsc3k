@@ -53,8 +53,7 @@ fn dump_ixf(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result
 
     for (i, r) in sc3k.records.iter().enumerate() {
         if let Some(ref dump_dir) = binary_dump {
-            let path = Path::new(dump_dir).join(format!("{:X?}/{:X?}/{:X?}.bin", r.type_id, r.group_id, r.instance_id));
-            fs::create_dir_all(path.parent().unwrap())?;
+            let path = Path::new(dump_dir).join(format!("{:X?}_{:X?}_{:X?}.bin", r.type_id, r.group_id, r.instance_id));
 
             let mut file = File::create(path)?;
             file.write_all(r.body)?;
