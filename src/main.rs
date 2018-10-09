@@ -33,6 +33,19 @@ fn main() -> Result<()> {
                 .required(true)
             )
         )
+        .subcommand(SubCommand::with_name("dbpf-uncompress")
+            .about("Uncompress a file with DBPF compression")
+            .arg(Arg::with_name("INPUT")
+                .help("The input file")
+                .takes_value(true)
+                .required(true)
+            )
+            .arg(Arg::with_name("OUTPUT")
+                .help("The output path")
+                .takes_value(true)
+                .required(true)
+            )
+        )
         .get_matches();
 
     match matches.subcommand() {
@@ -40,6 +53,10 @@ fn main() -> Result<()> {
             sub_m.value_of("INPUT").unwrap(),
             sub_m.is_present("skip-bad"),
             sub_m.value_of("to-file")
+        )?,
+        ("dbpf-uncompress", Some(sub_m)) => dbpf_uncompress(
+            sub_m.value_of("INPUT").unwrap(),
+            sub_m.value_of("OUTPUT").unwrap()
         )?,
         _ => println!("Unknown subcommand")
     }
@@ -70,6 +87,16 @@ fn dump_ixf(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result
         println!("{}Body:\n{}\n", out, dump_hex(r.body));
     }
 
+    Ok(())
+}
+
+fn dbpf_uncompress(input: &str, output: &str) -> Result<()> {
+    let parsed = format::DBPFCompression::parse(&fs::read(input)?)?;
+
+    parsed.instructions.iter().enumerate().for_each(|(i, insn)| println!("{}:\t{}\t{}\t{}\t{}",
+        i, insn.append_offset, insn.append_len, insn.decoded_copy_offset, insn.decoded_copy_len));
+
+    fs::write(output, parsed.uncompress()?)?;
     Ok(())
 }
 
