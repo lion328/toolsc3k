@@ -154,6 +154,8 @@ fn ixf_dump(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result
 }
 
 fn ixf_reconstruct(input: &str, output: &str) -> Result<()> {
+    use std::ffi::OsStr;
+
     let mut ixf = format::IXFFile {
         records: Vec::new()
     };
@@ -161,6 +163,11 @@ fn ixf_reconstruct(input: &str, output: &str) -> Result<()> {
     for entry in fs::read_dir(input)? {
         let entry = entry?;
         let path = entry.path();
+
+        if path.extension() != Some(OsStr::new("bin")) {
+            continue;
+        }
+
         let info = path.file_stem()
             .ok_or(Error::IXFFile("reconstruct: wrong file name format (file_stem)".into()))?
             .to_str()
