@@ -1,4 +1,4 @@
-use std::{fmt, result, io};
+use std::{error::Error as StdError, fmt, result, io};
 
 #[derive(Debug)]
 pub enum Error {
@@ -6,6 +6,7 @@ pub enum Error {
     IXFFile(String),
     RefPackCompression(String),
     Other(String),
+    OtherError(Box<StdError>),
 }
 
 impl fmt::Display for Error {
@@ -16,6 +17,7 @@ impl fmt::Display for Error {
             Error::IXFFile(ref s) => write!(f, "sc3k format error: {}", s),
             Error::RefPackCompression(ref s) => write!(f, "refpack compression error: {}", s),
             Error::Other(ref s) => write!(f, "error: {}", s),
+            Error::OtherError(ref e) => write!(f, "error: {}", e),
         }
     }
 }

@@ -35,6 +35,19 @@ fn main() -> Result<()> {
                     .required(true)
                 )
             )
+            .subcommand(SubCommand::with_name("reconstruct")
+                .about("Reconstruct IXF file from \"dump\" command")
+                .arg(Arg::with_name("INPUT")
+                    .help("The input directory")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("OUTPUT")
+                    .help("The output file")
+                    .takes_value(true)
+                    .required(true)
+                )
+            )
             .setting(AppSettings::SubcommandRequired)
         )
         .subcommand(SubCommand::with_name("refpack")
@@ -104,6 +117,10 @@ fn ixf(matches: &ArgMatches) -> Result<()> {
             sub_m.is_present("skip-bad"),
             sub_m.value_of("to-file")
         )?,
+        ("reconstruct", Some(sub)) => ixf_reconstruct(
+            sub.value_of("INPUT").unwrap(),
+            sub.value_of("OUTPUT").unwrap()
+        )?,
         _ => println!("Unknown subcommand")
     }
 
@@ -119,7 +136,7 @@ fn ixf_dump(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result
             let path = Path::new(dump_dir).join(format!("{:X?}_{:X?}_{:X?}.bin", r.type_id, r.group_id, r.instance_id));
 
             let mut file = File::create(path)?;
-            file.write_all(r.body)?;
+            file.write_all(&r.body)?;
 
             continue;
         }
@@ -130,8 +147,41 @@ fn ixf_dump(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result
         writeln!(out, "Group ID: 0x{:X?}", r.group_id);
         writeln!(out, "Instance ID: 0x{:X?}", r.instance_id);
         
-        println!("{}Body:\n{}\n", out, dump_hex(r.body));
+        println!("{}Body:\n{}\n", out, dump_hex(&r.body));
     }
+
+    Ok(())
+}
+
+fn ixf_reconstruct(input: &str, output: &str) -> Result<()> {
+    let mut ixf = format::IXFFile {
+        records: Vec::new()
+    };
+
+    for entry in fs::read_dir(input)? {
+        let entry = entry?;
+        let path = entry.path();
+        let info = path.file_stem()
+            .ok_or(Error::IXFFile("reconstruct: wrong file name format (file_stem)".into()))?
+            .to_str()
+            .ok_or(Error::from("cannot convert &OsStr to &Str"))?
+            .split('_')
+            .collect::<Vec<&str>>();
+
+        if info.len() != 3 {
+            println!("Wrong file name format for \"{:?}\", Skipped", path.file_name());
+            continue;
+        }
+
+        ixf.records.push(format::IXFRecord {
+            type_id: u32::from_str_radix(info[0], 16).map_err(|x| Error::OtherError(Box::new(x)))?,
+            group_id: u32::from_str_radix(info[1], 16).map_err(|x| Error::OtherError(Box::new(x)))?,
+            instance_id: u32::from_str_radix(info[2], 16).map_err(|x| Error::OtherError(Box::new(x)))?,
+            body: fs::read(&path)?,
+        })
+    }
+
+    fs::write(output, ixf.as_vec()?)?;
 
     Ok(())
 }

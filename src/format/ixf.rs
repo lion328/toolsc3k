@@ -1,23 +1,25 @@
-use std::io::{self, Read};
+use std::io::{self, Read, Write, Cursor};
 use error::*;
-use byteorder::{ReadBytesExt, LittleEndian as LE};
+use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
-pub static IXF_FILE_HEADER_IDENTIFIER: &[u8] = &[0xD7, 0x81, 0xC3, 0x80];
+pub const IXF_FILE_HEADER_IDENTIFIER: &[u8] = &[0xD7, 0x81, 0xC3, 0x80];
+pub const IXF_FILE_RECORD_LENGTH: usize = 20;
+pub const IXF_FILE_NULL_RECORD: &[u8] = &[0u8; IXF_FILE_RECORD_LENGTH];
 
-#[derive(Debug)]
-pub struct IXFFile<'a> {
-    pub records: Vec<IXFRecord<'a>>,
+#[derive(Debug, PartialEq)]
+pub struct IXFFile {
+    pub records: Vec<IXFRecord>,
 }
 
-#[derive(Debug)]
-pub struct IXFRecord<'a> {
+#[derive(Debug, PartialEq)]
+pub struct IXFRecord {
     pub type_id: u32,
     pub group_id: u32,
     pub instance_id: u32,
-    pub body: &'a [u8],
+    pub body: Vec<u8>,
 }
 
-impl<'a> IXFFile<'a> {
+impl IXFFile {
 
     pub fn parse(data: &[u8], skip_bad: bool) -> Result<IXFFile> {
         let mut ident = [0u8; 4];
@@ -56,7 +58,7 @@ impl<'a> IXFFile<'a> {
                 type_id: type_id,
                 group_id: group_id,
                 instance_id: instance_id,
-                body: &data[address..address + length],
+                body: data[address..address + length].to_vec(),
             });
         }
 
@@ -65,8 +67,30 @@ impl<'a> IXFFile<'a> {
         })
     }
 
-    pub fn as_vec(&self) -> Vec<u8> {
-        unimplemented!()
+    pub fn as_vec(&self) -> Result<Vec<u8>> {
+        let mut cursor = Cursor::new(Vec::new());
+
+        cursor.write_all(IXF_FILE_HEADER_IDENTIFIER)?;
+
+        let mut offset = IXF_FILE_HEADER_IDENTIFIER.len() + IXF_FILE_RECORD_LENGTH * (self.records.len() + 1);
+
+        for elem in self.records.iter() {
+            cursor.write_u32::<LE>(elem.type_id)?;
+            cursor.write_u32::<LE>(elem.group_id)?;
+            cursor.write_u32::<LE>(elem.instance_id)?;
+            cursor.write_u32::<LE>(offset as u32)?;
+            cursor.write_u32::<LE>(elem.body.len() as u32)?;
+
+            offset += elem.body.len();
+        }
+
+        cursor.write_all(IXF_FILE_NULL_RECORD)?;
+
+        for elem in self.records.iter() {
+            cursor.write_all(&elem.body)?;
+        }
+
+        Ok(cursor.into_inner())
     }
 }
 
@@ -151,5 +175,31 @@ mod tests {
         
         let records = IXFFile::parse(&data, true).unwrap().records;
         assert_eq!(records.len(), 0);
+    }
+
+    #[test]
+    fn reencode() {
+        let data = [
+            0xD7, 0x81, 0xC3, 0x80,
+            0x12, 0x34, 0x56, 0x78,
+            0x9A, 0xBC, 0xDE, 0xF0,
+            0x29, 0x99, 0x79, 0x24,
+            0x2C, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x00, 0x00,
+
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            // Yes, I missing this one. Still, they can be overlapped. I think the last 2*4 bytes of null record
+            // can be removed.
+            0x00, 0x00, 0x00, 0x00,
+
+            0xBE, 0xEF, 0xCA, 0xCE,
+        ];
+
+        let parsed = IXFFile::parse(&data, false).unwrap();
+
+        assert_eq!(parsed.as_vec().unwrap(), data.to_vec());
     }
 }
