@@ -9,54 +9,69 @@ use std::fs::{self, File};
 use std::path::Path;
 use std::fmt::Write as WF;
 use std::io::Write as WI;
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg, SubCommand, ArgMatches, AppSettings};
 
 fn main() -> Result<()> {
     let matches = App::new("toolsc3k")
         .about("A tool for reading assets of SimCity 3000.")
-        .subcommand(SubCommand::with_name("dump-ixf")
-            .about("Dump SC3K IXF file (.sc3, .DAT, etc.)")
-            .arg(Arg::with_name("skip-bad")
-                .help("Skip bad record")
-                .long("skip-bad")
-                .short("b")
+        .subcommand(SubCommand::with_name("ixf")
+            .about("Command for managing IXF file (i.e., *.sc3, *.DAT)")
+            .subcommand(SubCommand::with_name("dump")
+                .arg(Arg::with_name("skip-bad")
+                    .help("Skip bad record")
+                    .long("skip-bad")
+                    .short("b")
+                )
+                .arg(Arg::with_name("to-file")
+                    .help("Dump into binary files")
+                    .long("to-file")
+                    .short("t")
+                    .takes_value(true)
+                )
+                .arg(Arg::with_name("INPUT")
+                    .help("The file to dump")
+                    .takes_value(true)
+                    .required(true)
+                )
             )
-            .arg(Arg::with_name("to-file")
-                .help("Dump into binary files")
-                .long("to-file")
-                .short("t")
-                .takes_value(true)
-            )
-            .arg(Arg::with_name("INPUT")
-                .help("The file to dump")
-                .takes_value(true)
-                .required(true)
-            )
+            .setting(AppSettings::SubcommandRequired)
         )
-        .subcommand(SubCommand::with_name("dbpf-uncompress")
-            .about("Uncompress a file with DBPF compression")
-            .arg(Arg::with_name("INPUT")
-                .help("The input file")
-                .takes_value(true)
-                .required(true)
+        .subcommand(SubCommand::with_name("dbpf-compression")
+            .about("Command for managing files with DBPF compression")
+            .alias("dbpfc")
+            .subcommand(SubCommand::with_name("uncompress")
+                .about("Uncompress a file with DBPF compression")
+                .arg(Arg::with_name("INPUT")
+                    .help("The input file")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("OUTPUT")
+                    .help("The output path")
+                    .takes_value(true)
+                    .required(true)
+                )
             )
-            .arg(Arg::with_name("OUTPUT")
-                .help("The output path")
-                .takes_value(true)
-                .required(true)
-            )
+            .setting(AppSettings::SubcommandRequired)
         )
+        .setting(AppSettings::SubcommandRequired)
         .get_matches();
 
     match matches.subcommand() {
-        ("dump-ixf", Some(sub_m)) => dump_ixf(
+        ("ixf", Some(sub)) => ixf(sub)?,
+        ("dbpf-compression", Some(sub)) => dbpf(sub)?,
+        _ => println!("Unknown subcommand")
+    }
+
+    Ok(())
+}
+
+fn ixf(matches: &ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+        ("dump", Some(sub_m)) => ixf_dump(
             sub_m.value_of("INPUT").unwrap(),
             sub_m.is_present("skip-bad"),
             sub_m.value_of("to-file")
-        )?,
-        ("dbpf-uncompress", Some(sub_m)) => dbpf_uncompress(
-            sub_m.value_of("INPUT").unwrap(),
-            sub_m.value_of("OUTPUT").unwrap()
         )?,
         _ => println!("Unknown subcommand")
     }
@@ -64,7 +79,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dump_ixf(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result<()> {
+fn ixf_dump(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result<()> {
     let vec = fs::read(filename)?;
     let sc3k = format::IXFFile::parse(&vec, skip_bad)?;
 
@@ -85,6 +100,18 @@ fn dump_ixf(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result
         writeln!(out, "Instance ID: 0x{:X?}", r.instance_id);
         
         println!("{}Body:\n{}\n", out, dump_hex(r.body));
+    }
+
+    Ok(())
+}
+
+fn dbpf(matches: &ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+        ("uncompress", Some(sub_m)) => dbpf_uncompress(
+            sub_m.value_of("INPUT").unwrap(),
+            sub_m.value_of("OUTPUT").unwrap()
+        )?,
+        _ => println!("Unknown subcommand")
     }
 
     Ok(())
