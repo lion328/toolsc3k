@@ -2,41 +2,44 @@ use error::*;
 use std::io::Cursor;
 use byteorder::{ReadBytesExt, LE, BE};
 
-pub const DBPF_QFS_COMPRESSION_ID: u16 = 0xFB10;
+pub const REFPACK_COMPRESSION_ID: u16 = 0xFB10;
 
 #[derive(Debug)]
-pub struct DBPFCompression {
+pub struct RefPackCompression {
     pub data: Vec<u8>,
-    pub instructions: Vec<DBPFCompressionInstruction>,
+    pub instructions: Vec<RefPackCompressionInstruction>,
     pub uncompressed_len: usize,
 }
 
 #[derive(Debug)]
-pub struct DBPFCompressionInstruction {
+pub struct RefPackCompressionInstruction {
     pub append_offset: usize,
     pub append_len: usize,
     pub decoded_copy_offset: usize,
     pub decoded_copy_len: usize,
 }
 
-// Reference: http://www.wiki.sc4devotion.com/index.php?title=QFS_compression
+/** References:
+ * http://www.wiki.sc4devotion.com/index.php?title=QFS_compression
+ * http://wiki.niotso.org/RefPack
+ */
 
-impl DBPFCompression {
+impl RefPackCompression {
 
-    pub fn parse(data: &[u8]) -> Result<DBPFCompression> {
+    pub fn parse(data: &[u8]) -> Result<RefPackCompression> {
         let mut cursor = Cursor::new(data);
         let len = cursor.read_u32::<LE>()? as usize;
         let ident = cursor.read_u16::<LE>()?;
 
-        if ident != DBPF_QFS_COMPRESSION_ID {
-            return Err(Error::DBPFCompression(format!("invalid identifier: 0x{:04X?}", ident)))
+        if ident != REFPACK_COMPRESSION_ID {
+            return Err(Error::RefPackCompression(format!("invalid identifier: 0x{:04X?}", ident)))
         }
 
         if len > data.len() {
-            return Err(Error::DBPFCompression("length specified in file is greater than input buffer".to_string()))
+            return Err(Error::RefPackCompression("length specified in file is greater than input buffer".to_string()))
         }
 
-        let mut ret = DBPFCompression {
+        let mut ret = RefPackCompression {
             data: data.to_vec(),
             instructions: Vec::new(),
             uncompressed_len: cursor.read_u24::<BE>()? as usize,
@@ -54,7 +57,7 @@ impl DBPFCompression {
                     let control_1 = cursor.read_u8()? as usize;
                     i += 2;
 
-                    insn = DBPFCompressionInstruction {
+                    insn = RefPackCompressionInstruction {
                         append_offset: i,
                         append_len: control_0 & 0x03,
                         decoded_copy_offset: ((control_0 & 0x60) << 3) + control_1 + 1,
@@ -66,7 +69,7 @@ impl DBPFCompression {
                     let control_2 = cursor.read_u8()? as usize;
                     i += 3;
 
-                    insn = DBPFCompressionInstruction {
+                    insn = RefPackCompressionInstruction {
                         append_offset: i,
                         append_len: ((control_1 & 0xC0) >> 6) & 0x03,
                         decoded_copy_offset: ((control_1 & 0x3F) << 8) + control_2 + 1,
@@ -81,7 +84,7 @@ impl DBPFCompression {
                     i += 4;
 
                     // TS2
-                    /*insn = DBPFCompressionInstruction {
+                    /*insn = RefPackCompressionInstruction {
                         append_offset: i,
                         append_len: control_0 & 0x03,
                         decoded_copy_offset: ((control_0 & 0x10) << 12) + (control_1 << 8 ) + control_2 + 1,
@@ -89,7 +92,7 @@ impl DBPFCompression {
                     };*/
 
                     // SC4?
-                    insn = DBPFCompressionInstruction {
+                    insn = RefPackCompressionInstruction {
                         append_offset: i,
                         append_len: control_0 & 0x03,
                         decoded_copy_offset: (control_1 << 8) + control_2,
@@ -98,7 +101,7 @@ impl DBPFCompression {
                 },
                 0xE0 ... 0xFB => {
                     i += 1;
-                    insn = DBPFCompressionInstruction {
+                    insn = RefPackCompressionInstruction {
                         append_offset: i,
                         append_len: ((control_0 & 0x1F) << 2) + 4,
                         decoded_copy_offset: 0,
@@ -107,14 +110,14 @@ impl DBPFCompression {
                 },
                 0xFC ... 0xFF => {
                     i += 1;
-                    insn = DBPFCompressionInstruction {
+                    insn = RefPackCompressionInstruction {
                         append_offset: i,
                         append_len: control_0 & 0x03,
                         decoded_copy_offset: 0,
                         decoded_copy_len: 0,
                     };
                 },
-                _ => return Err(Error::DBPFCompression(format!("unknown control code: 0x{:X?}", control_0)))
+                _ => return Err(Error::RefPackCompression(format!("unknown control code: 0x{:X?}", control_0)))
             }
 
             if insn.append_len > 0 {
@@ -142,7 +145,7 @@ impl DBPFCompression {
             }
 
             if elem.decoded_copy_offset >= decoded.len() {
-                return Err(Error::DBPFCompression(format!("decompression start index out of bounds: len ({}) <= {}",
+                return Err(Error::RefPackCompression(format!("decompression start index out of bounds: len ({}) <= {}",
                     decoded.len(), elem.decoded_copy_offset)))
             }
 
@@ -155,7 +158,7 @@ impl DBPFCompression {
         }
 
         if decoded.len() != self.uncompressed_len {
-            return Err(Error::DBPFCompression(format!("uncompressed length mismatched: {} != {}", decoded.len(),
+            return Err(Error::RefPackCompression(format!("uncompressed length mismatched: {} != {}", decoded.len(),
                 self.uncompressed_len)));
         }
 
@@ -167,12 +170,12 @@ impl DBPFCompression {
         let len = cursor.read_u32::<LE>()? as usize;
         let ident = cursor.read_u16::<LE>()?;
 
-        if ident != DBPF_QFS_COMPRESSION_ID {
-            return Err(Error::DBPFCompression(format!("invalid identifier: 0x{:04X?}", ident)))
+        if ident != REFPACK_COMPRESSION_ID {
+            return Err(Error::RefPackCompression(format!("invalid identifier: 0x{:04X?}", ident)))
         }
 
         if len > data.len() {
-            return Err(Error::DBPFCompression("length specified in file is greater than input buffer".to_string()))
+            return Err(Error::RefPackCompression("length specified in file is greater than input buffer".to_string()))
         }
 
         let uncompressed_len = cursor.read_u24::<BE>()? as usize;
@@ -222,7 +225,7 @@ impl DBPFCompression {
                     copy_offset = 0;
                     copy_len = 0;
                 },
-                _ => return Err(Error::DBPFCompression(format!("unknown control code: 0x{:X?}", b0)))
+                _ => return Err(Error::RefPackCompression(format!("unknown control code: 0x{:X?}", b0)))
             }
 
             for _ in 0..append_len {
@@ -234,7 +237,7 @@ impl DBPFCompression {
             }
 
             if copy_offset >= decoded.len() {
-                return Err(Error::DBPFCompression(format!("decompression start index out of bounds: len ({}) <= {}",
+                return Err(Error::RefPackCompression(format!("decompression start index out of bounds: len ({}) <= {}",
                     decoded.len(), copy_offset)))
             }
 
@@ -247,14 +250,14 @@ impl DBPFCompression {
         }
 
         if decoded.len() != uncompressed_len {
-            return Err(Error::DBPFCompression(format!("uncompressed length mismatched: {} != {}", decoded.len(),
+            return Err(Error::RefPackCompression(format!("uncompressed length mismatched: {} != {}", decoded.len(),
                 uncompressed_len)));
         }
 
         Ok(decoded)
     }
 
-    pub fn compress(data: &[u8]) -> DBPFCompression {
+    pub fn compress(data: &[u8]) -> RefPackCompression {
         unimplemented!()
     }
 }

@@ -37,11 +37,10 @@ fn main() -> Result<()> {
             )
             .setting(AppSettings::SubcommandRequired)
         )
-        .subcommand(SubCommand::with_name("dbpf-compression")
-            .about("Command for managing files with DBPF compression")
-            .alias("dbpfc")
+        .subcommand(SubCommand::with_name("refpack")
+            .about("Command for managing files with RefPack compression")
             .subcommand(SubCommand::with_name("uncompress")
-                .about("Uncompress a file with DBPF compression")
+                .about("Uncompress a file with RefPack compression")
                 .arg(Arg::with_name("INPUT")
                     .help("The input file")
                     .takes_value(true)
@@ -77,7 +76,7 @@ fn main() -> Result<()> {
 
     match matches.subcommand() {
         ("ixf", Some(sub)) => ixf(sub)?,
-        ("dbpf-compression", Some(sub)) => dbpf(sub)?,
+        ("refpack", Some(sub)) => refpack(sub)?,
         ("image", Some(sub)) => image(sub)?,
         _ => println!("Unknown subcommand")
     }
@@ -124,9 +123,9 @@ fn ixf_dump(filename: &str, skip_bad: bool, binary_dump: Option<&str>) -> Result
     Ok(())
 }
 
-fn dbpf(matches: &ArgMatches) -> Result<()> {
+fn refpack(matches: &ArgMatches) -> Result<()> {
     match matches.subcommand() {
-        ("uncompress", Some(sub_m)) => dbpf_uncompress(
+        ("uncompress", Some(sub_m)) => refpack_uncompress(
             sub_m.value_of("INPUT").unwrap(),
             sub_m.value_of("OUTPUT").unwrap()
         )?,
@@ -136,14 +135,14 @@ fn dbpf(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn dbpf_uncompress(input: &str, output: &str) -> Result<()> {
-    /*let parsed = format::DBPFCompression::parse(&fs::read(input)?)?;
+fn refpack_uncompress(input: &str, output: &str) -> Result<()> {
+    /*let parsed = format::RefPackCompression::parse(&fs::read(input)?)?;
 
     parsed.instructions.iter().enumerate().for_each(|(i, insn)| println!("{}:\t{}\t{}\t{}\t{}",
         i, insn.append_offset, insn.append_len, insn.decoded_copy_offset, insn.decoded_copy_len));
 
     fs::write(output, parsed.uncompress()?)?;*/
-    fs::write(output, format::DBPFCompression::uncompress_direct(&fs::read(input)?)?)?;
+    fs::write(output, format::RefPackCompression::uncompress_direct(&fs::read(input)?)?)?;
     Ok(())
 }
 
