@@ -52,6 +52,19 @@ fn main() -> Result<()> {
                     .required(true)
                 )
             )
+            .subcommand(SubCommand::with_name("compress")
+                .about("Compress a file with RefPack compression")
+                .arg(Arg::with_name("INPUT")
+                    .help("The input file")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("OUTPUT")
+                    .help("The output path")
+                    .takes_value(true)
+                    .required(true)
+                )
+            )
             .setting(AppSettings::SubcommandRequired)
         )
         .subcommand(SubCommand::with_name("image")
@@ -129,6 +142,10 @@ fn refpack(matches: &ArgMatches) -> Result<()> {
             sub_m.value_of("INPUT").unwrap(),
             sub_m.value_of("OUTPUT").unwrap()
         )?,
+        ("compress", Some(sub_m)) => refpack_compress(
+            sub_m.value_of("INPUT").unwrap(),
+            sub_m.value_of("OUTPUT").unwrap()
+        )?,
         _ => println!("Unknown subcommand")
     }
 
@@ -143,6 +160,14 @@ fn refpack_uncompress(input: &str, output: &str) -> Result<()> {
 
     fs::write(output, parsed.uncompress()?)?;*/
     fs::write(output, format::RefPackCompression::uncompress_direct(&fs::read(input)?)?)?;
+    Ok(())
+}
+
+fn refpack_compress(input: &str, output: &str) -> Result<()> {
+    let data = fs::read(input)?;
+    let compress = format::RefPackCompression::compress_bad(&data)?;
+    assert_eq!(format::RefPackCompression::uncompress_direct(&compress)?, data);
+    fs::write(output, compress)?;
     Ok(())
 }
 

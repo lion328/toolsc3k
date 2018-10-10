@@ -1,8 +1,8 @@
 use error::*;
-use std::io::Cursor;
-use byteorder::{ReadBytesExt, LE, BE};
+use std::io::{Cursor, Write};
+use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 
-pub const REFPACK_COMPRESSION_ID: u16 = 0xFB10;
+pub const REFPACK_COMPRESSION_ID: u16 = 0x10FB;
 
 #[derive(Debug)]
 pub struct RefPackCompression {
@@ -28,15 +28,10 @@ impl RefPackCompression {
 
     pub fn parse(data: &[u8]) -> Result<RefPackCompression> {
         let mut cursor = Cursor::new(data);
-        let len = cursor.read_u32::<LE>()? as usize;
-        let ident = cursor.read_u16::<LE>()?;
+        let ident = cursor.read_u16::<BE>()?;
 
         if ident != REFPACK_COMPRESSION_ID {
             return Err(Error::RefPackCompression(format!("invalid identifier: 0x{:04X?}", ident)))
-        }
-
-        if len > data.len() {
-            return Err(Error::RefPackCompression("length specified in file is greater than input buffer".to_string()))
         }
 
         let mut ret = RefPackCompression {
@@ -46,7 +41,7 @@ impl RefPackCompression {
         };
 
         let mut i = 9;
-        while i < len {
+        while i < data.len() {
             let control_0 = cursor.read_u8()? as usize;
             let insn;
 
@@ -167,24 +162,18 @@ impl RefPackCompression {
 
     pub fn uncompress_direct(data: &[u8]) -> Result<Vec<u8>> {
         let mut cursor = Cursor::new(data);
-        let len = cursor.read_u32::<LE>()? as usize;
-        let ident = cursor.read_u16::<LE>()?;
+        let ident = cursor.read_u16::<BE>()?;
 
         if ident != REFPACK_COMPRESSION_ID {
             return Err(Error::RefPackCompression(format!("invalid identifier: 0x{:04X?}", ident)))
         }
 
-        if len > data.len() {
-            return Err(Error::RefPackCompression("length specified in file is greater than input buffer".to_string()))
-        }
-
         let uncompressed_len = cursor.read_u24::<BE>()? as usize;
 
         let mut decoded = Vec::new();
+        let mut stop_command = false;
 
-        while cursor.position() < len as u64 {
-            println!("{}", decoded.len());
-
+        while cursor.position() < data.len() as u64 && !stop_command {
             let b0 = cursor.read_u8()? as usize;
             let append_len;
             let copy_offset;
@@ -224,6 +213,7 @@ impl RefPackCompression {
                     append_len = b0 & 0x03;
                     copy_offset = 0;
                     copy_len = 0;
+                    stop_command = true;
                 },
                 _ => return Err(Error::RefPackCompression(format!("unknown control code: 0x{:X?}", b0)))
             }
@@ -259,5 +249,39 @@ impl RefPackCompression {
 
     pub fn compress(data: &[u8]) -> RefPackCompression {
         unimplemented!()
+    }
+
+    pub fn compress_bad(data: &[u8]) -> Result<Vec<u8>> {
+        let mut cursor = Cursor::new(Vec::new());
+
+        cursor.write_u16::<BE>(REFPACK_COMPRESSION_ID)?;
+        cursor.write_u24::<BE>(data.len() as u32)?;
+
+        let mut remaining = data.len();
+
+        while remaining >= 112 {
+            let off = data.len() - remaining;
+            cursor.write_u8(0xFB)?;
+            cursor.write_all(&data[off..off + 112])?;
+            remaining -= 112;
+        }
+
+        assert!(remaining < 112);
+
+        let left_bits = ((remaining - 4) / 4) as u8;
+        let left = left_bits as usize * 4 + 4;
+        let off = data.len() - remaining;
+
+        remaining -= left;
+
+        cursor.write_u8(0b11100000u8 | left_bits)?;
+        cursor.write_all(&data[off..off + left])?;
+
+        assert!(remaining <= 3);
+
+        cursor.write_u8(0b11111100u8 | remaining as u8)?;
+        cursor.write_all(&data[data.len() - remaining..])?;
+
+        Ok(cursor.into_inner())
     }
 }
