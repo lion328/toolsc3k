@@ -6,3 +6,4 @@ authors = ["Waritnan Sookbuntherng <lion328@hotmail.co.th>"]
 [dependencies]
 byteorder = "1.2"
 clap = "2.32"
+image = "0.20"

@@ -5,6 +5,7 @@ pub enum Error {
     IO(io::Error),
     IXFFile(String),
     DBPFCompression(String),
+    Other(String),
 }
 
 impl fmt::Display for Error {
@@ -14,6 +15,7 @@ impl fmt::Display for Error {
             Error::IO(ref e) => write!(f, "io error: {}", e),
             Error::IXFFile(ref s) => write!(f, "sc3k format error: {}", s),
             Error::DBPFCompression(ref s) => write!(f, "dbpf compression error: {}", s),
+            Error::Other(ref s) => write!(f, "error: {}", s),
         }
     }
 }
@@ -22,6 +24,20 @@ impl From<io::Error> for Error {
 
     fn from(e: io::Error) -> Error {
         Error::IO(e)
+    }
+}
+
+impl From<String> for Error {
+
+    fn from(s: String) -> Error {
+        Error::Other(s)
+    }
+}
+
+impl From<&'static str> for Error {
+
+    fn from(s: &'static str) -> Error {
+        Error::Other(s.to_string())
     }
 }
 

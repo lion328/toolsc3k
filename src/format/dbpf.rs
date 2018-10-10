@@ -39,7 +39,7 @@ impl DBPFCompression {
         let mut ret = DBPFCompression {
             data: data.to_vec(),
             instructions: Vec::new(),
-            uncompressed_len: cursor.read_u24::<BE>()? as usize, // TODO: is this LE or BE?
+            uncompressed_len: cursor.read_u24::<BE>()? as usize,
         };
 
         let mut i = 9;
@@ -157,6 +157,98 @@ impl DBPFCompression {
         if decoded.len() != self.uncompressed_len {
             return Err(Error::DBPFCompression(format!("uncompressed length mismatched: {} != {}", decoded.len(),
                 self.uncompressed_len)));
+        }
+
+        Ok(decoded)
+    }
+
+    pub fn uncompress_direct(data: &[u8]) -> Result<Vec<u8>> {
+        let mut cursor = Cursor::new(data);
+        let len = cursor.read_u32::<LE>()? as usize;
+        let ident = cursor.read_u16::<LE>()?;
+
+        if ident != DBPF_QFS_COMPRESSION_ID {
+            return Err(Error::DBPFCompression(format!("invalid identifier: 0x{:04X?}", ident)))
+        }
+
+        if len > data.len() {
+            return Err(Error::DBPFCompression("length specified in file is greater than input buffer".to_string()))
+        }
+
+        let uncompressed_len = cursor.read_u24::<BE>()? as usize;
+
+        let mut decoded = Vec::new();
+
+        while cursor.position() < len as u64 {
+            println!("{}", decoded.len());
+
+            let b0 = cursor.read_u8()? as usize;
+            let append_len;
+            let copy_offset;
+            let copy_len;
+
+            match b0 {
+                0x00 ... 0x7F => {
+                    let b1 = cursor.read_u8()? as usize;
+
+                    append_len = b0 & 0x03;
+                    copy_offset = ((b0 & 0x60) << 3) + b1 + 1;
+                    copy_len = ((b0 & 0x1C) >> 2) + 3;
+                },
+                0x80 ... 0xBF => {
+                    let b1 = cursor.read_u8()? as usize;
+                    let b2 = cursor.read_u8()? as usize;
+
+                    append_len = ((b1 & 0xC0) >> 6) & 0x03;
+                    copy_offset = ((b1 & 0x3F) << 8) + b2 + 1;
+                    copy_len = (b0 & 0x3F) + 4;
+                },
+                0xC0 ... 0xDF => {
+                    let b1 = cursor.read_u8()? as usize;
+                    let b2 = cursor.read_u8()? as usize;
+                    let b3 = cursor.read_u8()? as usize;
+
+                    append_len = b0 & 0x03;
+                    copy_offset = (b1 << 8) + b2;
+                    copy_len = ((b0 & 0x1C) << 6) + b3 + 5;
+                },
+                0xE0 ... 0xFB => {
+                    append_len = ((b0 & 0x1F) << 2) + 4;
+                    copy_offset = 0;
+                    copy_len = 0;
+                },
+                0xFC ... 0xFF => {
+                    append_len = b0 & 0x03;
+                    copy_offset = 0;
+                    copy_len = 0;
+                },
+                _ => return Err(Error::DBPFCompression(format!("unknown control code: 0x{:X?}", b0)))
+            }
+
+            for _ in 0..append_len {
+                decoded.push(cursor.read_u8()?);
+            }
+
+            if copy_len <= 0 {
+                continue
+            }
+
+            if copy_offset >= decoded.len() {
+                return Err(Error::DBPFCompression(format!("decompression start index out of bounds: len ({}) <= {}",
+                    decoded.len(), copy_offset)))
+            }
+
+            let start = decoded.len() - copy_offset - 1;
+
+            for i in start..start + copy_len {
+                let b = decoded[i];
+                decoded.push(b);
+            }
+        }
+
+        if decoded.len() != uncompressed_len {
+            return Err(Error::DBPFCompression(format!("uncompressed length mismatched: {} != {}", decoded.len(),
+                uncompressed_len)));
         }
 
         Ok(decoded)

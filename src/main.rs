@@ -1,5 +1,6 @@
 extern crate byteorder;
 extern crate clap;
+extern crate image;
 
 pub mod error;
 pub mod format;
@@ -54,12 +55,30 @@ fn main() -> Result<()> {
             )
             .setting(AppSettings::SubcommandRequired)
         )
+        .subcommand(SubCommand::with_name("image")
+            .about("Command for dealing with game image, such as savefile preview, etc.")
+            .subcommand(SubCommand::with_name("to-png")
+                .about("Convert game image to PNG format")
+                .arg(Arg::with_name("INPUT")
+                    .help("The input file")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("OUTPUT")
+                    .help("The output file")
+                    .takes_value(true)
+                    .required(true)
+                )
+            )
+            .setting(AppSettings::SubcommandRequired)
+        )
         .setting(AppSettings::SubcommandRequired)
         .get_matches();
 
     match matches.subcommand() {
         ("ixf", Some(sub)) => ixf(sub)?,
         ("dbpf-compression", Some(sub)) => dbpf(sub)?,
+        ("image", Some(sub)) => image(sub)?,
         _ => println!("Unknown subcommand")
     }
 
@@ -118,12 +137,50 @@ fn dbpf(matches: &ArgMatches) -> Result<()> {
 }
 
 fn dbpf_uncompress(input: &str, output: &str) -> Result<()> {
-    let parsed = format::DBPFCompression::parse(&fs::read(input)?)?;
+    /*let parsed = format::DBPFCompression::parse(&fs::read(input)?)?;
 
     parsed.instructions.iter().enumerate().for_each(|(i, insn)| println!("{}:\t{}\t{}\t{}\t{}",
         i, insn.append_offset, insn.append_len, insn.decoded_copy_offset, insn.decoded_copy_len));
 
-    fs::write(output, parsed.uncompress()?)?;
+    fs::write(output, parsed.uncompress()?)?;*/
+    fs::write(output, format::DBPFCompression::uncompress_direct(&fs::read(input)?)?)?;
+    Ok(())
+}
+
+fn image(matches: &ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+        ("to-png", Some(sub)) => image_to_png(
+            sub.value_of("INPUT").unwrap(),
+            sub.value_of("OUTPUT").unwrap()
+        )?,
+        _ => println!("Unknown subcommand")
+    }
+
+    Ok(())
+}
+
+fn image_to_png(input: &str, output: &str) -> Result<()> {
+    let raw = fs::read(input)?;
+    
+    if raw.len() % 2 != 0 {
+        return Err("Wrong format (the length cannot not divisible by 2)".into())
+    }
+
+    let len_half = raw.len() / 2;
+    let width = (len_half as f64).sqrt() as usize; // It's not look good TBH.
+
+    let mut buffer = vec![0u8; len_half * 3];
+
+    for i in 0..len_half {
+        let (a, b) = (raw[i * 2] as u32, raw[i * 2 + 1] as u32);
+
+        buffer[i * 3 + 0] = (((a & 0b11111100) >> 2) * 0xFF / 0b111111) as u8;
+        buffer[i * 3 + 1] = (((a & 0b00000011) << 3) | ((b & 0b11100000) >> 5) * 0xFF / 0b11111) as u8;
+        buffer[i * 3 + 2] = ((a & 0b00011111) * 0xFF / 0b11111) as u8;
+    }
+
+    image::save_buffer(output, &buffer, width as u32, width as u32, image::ColorType::RGB(8))?;
+
     Ok(())
 }
 
