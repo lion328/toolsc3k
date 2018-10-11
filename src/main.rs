@@ -9,7 +9,7 @@ use error::*;
 use std::fs::{self, File};
 use std::path::Path;
 use std::fmt::Write as WF;
-use std::io::Write as WI;
+use std::io::{Write as WI, BufReader};
 use clap::{App, Arg, SubCommand, ArgMatches, AppSettings};
 
 fn main() -> Result<()> {
@@ -84,6 +84,19 @@ fn main() -> Result<()> {
             .about("Command for dealing with game image, such as savefile preview, etc.")
             .subcommand(SubCommand::with_name("to-png")
                 .about("Convert game image to PNG format")
+                .arg(Arg::with_name("INPUT")
+                    .help("The input file")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("OUTPUT")
+                    .help("The output file")
+                    .takes_value(true)
+                    .required(true)
+                )
+            )
+            .subcommand(SubCommand::with_name("from-png")
+                .about("Convert PNG image to game image format")
                 .arg(Arg::with_name("INPUT")
                     .help("The input file")
                     .takes_value(true)
@@ -234,6 +247,10 @@ fn image(matches: &ArgMatches) -> Result<()> {
             sub.value_of("INPUT").unwrap(),
             sub.value_of("OUTPUT").unwrap()
         )?,
+        ("from-png", Some(sub)) => image_from_png(
+            sub.value_of("INPUT").unwrap(),
+            sub.value_of("OUTPUT").unwrap()
+        )?,
         _ => println!("Unknown subcommand")
     }
 
@@ -253,14 +270,47 @@ fn image_to_png(input: &str, output: &str) -> Result<()> {
     let mut buffer = vec![0u8; len_half * 3];
 
     for i in 0..len_half {
-        let (a, b) = (raw[i * 2] as u32, raw[i * 2 + 1] as u32);
+        let (a, b) = (raw[i * 2], raw[i * 2 + 1]);
 
-        buffer[i * 3 + 0] = (((a & 0b11111100) >> 2) * 0xFF / 0b111111) as u8;
-        buffer[i * 3 + 1] = (((a & 0b00000011) << 3) | ((b & 0b11100000) >> 5) * 0xFF / 0b11111) as u8;
-        buffer[i * 3 + 2] = ((a & 0b00011111) * 0xFF / 0b11111) as u8;
+        buffer[i * 3 + 0] = ((b >> 3) & 0x1F) << 3;
+        buffer[i * 3 + 1] = ((a >> 5) | ((b & 7) << 3)) << 2;
+        buffer[i * 3 + 2] = (a & 0x1F) << 3;
     }
 
     image::save_buffer(output, &buffer, width as u32, width as u32, image::ColorType::RGB(8))?;
+
+    Ok(())
+}
+
+fn image_from_png(input: &str, output: &str) -> Result<()> {
+    use image::Pixel;
+
+    let img = image::load(BufReader::new(File::open(input)?), image::ImageFormat::PNG)
+        .map_err(|x| Error::OtherError(Box::new(x)))?;
+
+    let rgb = img.to_rgb();
+    
+    if rgb.width() != rgb.height() {
+        return Err("width != height".into());
+    }
+
+    let mut out = Vec::with_capacity((rgb.width() * rgb.width() * 2) as usize);
+
+    for p in rgb.pixels() {
+        let c = p.channels();
+
+        // Little endian R:G:B = 5:6:5
+        // as an integer: RRRRRGGG GGGBBBBB
+
+        let r = c[0];
+        let g = c[1];
+        let b = c[2];
+
+        out.push((b >> 3) | ((g & 0x1C) << 3));
+        out.push((r & 0xF8) | ((g >> 5) & 7));
+    }
+
+    fs::write(output, &out)?;
 
     Ok(())
 }
