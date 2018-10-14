@@ -229,20 +229,14 @@ fn refpack(matches: &ArgMatches) -> Result<()> {
 }
 
 fn refpack_uncompress(input: &str, output: &str) -> Result<()> {
-    /*let parsed = format::RefPackCompression::parse(&fs::read(input)?)?;
-
-    parsed.instructions.iter().enumerate().for_each(|(i, insn)| println!("{}:\t{}\t{}\t{}\t{}",
-        i, insn.append_offset, insn.append_len, insn.decoded_copy_offset, insn.decoded_copy_len));
-
-    fs::write(output, parsed.uncompress()?)?;*/
-    fs::write(output, format::RefPackCompression::uncompress_direct(&fs::read(input)?)?)?;
+    fs::write(output, format::RefPackCompression::uncompress(&fs::read(input)?)?)?;
     Ok(())
 }
 
 fn refpack_compress(input: &str, output: &str) -> Result<()> {
     let data = fs::read(input)?;
-    let compress = format::RefPackCompression::compress_bad(&data)?;
-    assert_eq!(format::RefPackCompression::uncompress_direct(&compress)?, data);
+    let compress = format::RefPackCompression::compress(&data)?;
+    assert_eq!(format::RefPackCompression::uncompress(&compress)?, data);
     fs::write(output, compress)?;
     Ok(())
 }
