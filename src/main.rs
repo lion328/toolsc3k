@@ -82,6 +82,12 @@ fn main() -> Result<()> {
         )
         .subcommand(SubCommand::with_name("image")
             .about("Command for dealing with game image, such as savefile preview, etc.")
+            .arg(Arg::with_name("type")
+                .help("Image format type")
+                .long("type")
+                .short("t")
+                .takes_value(true)
+            )
             .subcommand(SubCommand::with_name("to-png")
                 .about("Convert game image to PNG format")
                 .arg(Arg::with_name("INPUT")
@@ -242,14 +248,20 @@ fn refpack_compress(input: &str, output: &str) -> Result<()> {
 }
 
 fn image(matches: &ArgMatches) -> Result<()> {
+    let format = matches.value_of("type")
+        .map(|s| format::ImageType::from_game_value(s.parse::<u32>().unwrap()).unwrap())
+        .unwrap_or(format::ImageType::R5G6B5);
+
     match matches.subcommand() {
         ("to-png", Some(sub)) => image_to_png(
             sub.value_of("INPUT").unwrap(),
-            sub.value_of("OUTPUT").unwrap()
+            sub.value_of("OUTPUT").unwrap(),
+            format
         )?,
         ("from-png", Some(sub)) => image_from_png(
             sub.value_of("INPUT").unwrap(),
-            sub.value_of("OUTPUT").unwrap()
+            sub.value_of("OUTPUT").unwrap(),
+            format
         )?,
         _ => println!("Unknown subcommand")
     }
@@ -257,60 +269,32 @@ fn image(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn image_to_png(input: &str, output: &str) -> Result<()> {
+fn image_to_png(input: &str, output: &str, image_type: format::ImageType) -> Result<()> {
     let raw = fs::read(input)?;
-    
-    if raw.len() % 2 != 0 {
-        return Err("Wrong format (the length cannot not divisible by 2)".into())
-    }
+    let image = format::Image::new(image_type, raw)?;
 
-    let len_half = raw.len() / 2;
-    let width = (len_half as f64).sqrt() as usize; // It's not look good TBH.
-
-    let mut buffer = vec![0u8; len_half * 3];
-
-    for i in 0..len_half {
-        let (a, b) = (raw[i * 2], raw[i * 2 + 1]);
-
-        buffer[i * 3 + 0] = ((b >> 3) & 0x1F) << 3;
-        buffer[i * 3 + 1] = ((a >> 5) | ((b & 7) << 3)) << 2;
-        buffer[i * 3 + 2] = (a & 0x1F) << 3;
-    }
-
-    image::save_buffer(output, &buffer, width as u32, width as u32, image::ColorType::RGB(8))?;
+    image::save_buffer(
+        output,
+        &image.to_rgb8(),
+        image.width() as u32,
+        image.width() as u32,
+        image::ColorType::RGB(8)
+    )?;
 
     Ok(())
 }
 
-fn image_from_png(input: &str, output: &str) -> Result<()> {
-    use image::Pixel;
-
-    let img = image::load(BufReader::new(File::open(input)?), image::ImageFormat::PNG)
-        .map_err(|x| Error::OtherError(Box::new(x)))?;
-
-    let rgb = img.to_rgb();
-    
-    if rgb.width() != rgb.height() {
-        return Err("width != height".into());
-    }
-
-    let mut out = Vec::with_capacity((rgb.width() * rgb.width() * 2) as usize);
-
-    for p in rgb.pixels() {
-        let c = p.channels();
-
-        // Little endian R:G:B = 5:6:5
-        // as an integer: RRRRRGGG GGGBBBBB
-
-        let r = c[0];
-        let g = c[1];
-        let b = c[2];
-
-        out.push((b >> 3) | ((g & 0x1C) << 3));
-        out.push((r & 0xF8) | ((g >> 5) & 7));
-    }
-
-    fs::write(output, &out)?;
+fn image_from_png(input: &str, output: &str, image_type: format::ImageType) -> Result<()> {
+    fs::write(
+        output,
+        &format::Image::from_rgb8(
+            &image::load(BufReader::new(File::open(input)?), image::ImageFormat::PNG)
+                .map_err(|x| Error::OtherError(Box::new(x)))?
+                .to_rgb()
+                .into_raw(),
+            image_type
+        )?.into_inner()
+    )?;
 
     Ok(())
 }

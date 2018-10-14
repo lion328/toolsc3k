@@ -5,6 +5,7 @@ pub enum Error {
     IO(io::Error),
     IXFFile(String),
     RefPackCompression(String),
+    Image(String),
     Other(String),
     OtherError(Box<StdError>),
 }
@@ -16,6 +17,7 @@ impl fmt::Display for Error {
             Error::IO(ref e) => write!(f, "io error: {}", e),
             Error::IXFFile(ref s) => write!(f, "sc3k format error: {}", s),
             Error::RefPackCompression(ref s) => write!(f, "refpack compression error: {}", s),
+            Error::Image(ref s) => write!(f, "image format error: {}", s),
             Error::Other(ref s) => write!(f, "error: {}", s),
             Error::OtherError(ref e) => write!(f, "error: {}", e),
         }
