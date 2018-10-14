@@ -195,14 +195,23 @@ impl RefPackCompression {
                     copy_offset = ((b1 & 0x3F) << 8) + b2 + 1;
                     copy_len = (b0 & 0x3F) + 4;
                 },
-                0xC0 ... 0xDF => {
+                0xC0 ... 0xCF => {
                     let b1 = cursor.read_u8()? as usize;
                     let b2 = cursor.read_u8()? as usize;
                     let b3 = cursor.read_u8()? as usize;
 
                     append_len = b0 & 0x03;
-                    copy_offset = (b1 << 8) + b2;
+                    copy_offset = (b1 << 8) + b2 + 1;
                     copy_len = ((b0 & 0x1C) << 6) + b3 + 5;
+                },
+                0xD0 ... 0xDF => {
+                    let b1 = cursor.read_u8()? as usize;
+                    let b2 = cursor.read_u8()? as usize;
+                    let b3 = cursor.read_u8()? as usize;
+
+                    append_len = b0 & 0x03;
+                    copy_offset = ((b0 & 0x10) << 12) + (b1 << 8) + b2 + 1;
+                    copy_len = ((b0 & 0x0C) << 6) + b3 + 5;
                 },
                 0xE0 ... 0xFB => {
                     append_len = ((b0 & 0x1F) << 2) + 4;
@@ -226,12 +235,12 @@ impl RefPackCompression {
                 continue
             }
 
-            if copy_offset >= decoded.len() {
-                return Err(Error::RefPackCompression(format!("decompression start index out of bounds: len ({}) <= {}",
+            if copy_offset > decoded.len() {
+                return Err(Error::RefPackCompression(format!("decompression start index out of bounds: len ({}) < {}",
                     decoded.len(), copy_offset)))
             }
 
-            let start = decoded.len() - copy_offset - 1;
+            let start = decoded.len() - copy_offset;
 
             for i in start..start + copy_len {
                 let b = decoded[i];
