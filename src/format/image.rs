@@ -5,35 +5,41 @@ pub struct Image {
     image_type: ImageType,
     data: Vec<u8>,
     width: usize,
+    height: usize,
 }
 
 impl Image {
 
-    pub fn new(image_type: ImageType, data: Vec<u8>) -> Result<Image> {
-        // TODO: Find out all image type (I guess in some condition the if below is not required).
-        if data.len() % 2 != 0 {
-            return Err(Error::Image("length cannot not divisible by 2".into()));
+    pub fn new(image_type: ImageType, width: usize, height: usize, data: Vec<u8>) -> Result<Image> {
+        if data.len() != width * height * 2 {
+            return Err(Error::Image(
+                format!(
+                    "size of the game image data is not matched for an image with (width, height) = ({}, {})",
+                    width, height
+                )
+            ));
         }
-
-        let width = (data.len() as f64 * 0.5).sqrt() as usize;
 
         Ok(Image {
             image_type: image_type,
             data: data,
             width: width,
+            height: height,
         })
     }
 
-    pub fn from_rgb8(raw: &[u8], image_type: ImageType) -> Result<Image> {
+    pub fn from_rgb8(raw: &[u8], width: usize, height: usize, image_type: ImageType) -> Result<Image> {
         if raw.len() % 3 != 0 {
             return Err(Error::Image("invalid raw RGB8 pixels (length % 3 != 0)".into()));
         }
 
         let px_count = raw.len() / 3;
-        let width = (px_count as f64).sqrt() as usize;
 
-        if width * width != px_count {
-            return Err(Error::Image("the image is not a square shape (width != height)".into()));
+        if width * height != px_count {
+            return Err(Error::Image(format!(
+                    "size of the raw RGB pixels data is not matched for an image with (width, height) = ({}, {})",
+                    width, height
+            )));
         }
 
         let mut buffer = Vec::with_capacity(px_count * 2);
@@ -60,6 +66,7 @@ impl Image {
             image_type: image_type,
             data: buffer,
             width: width,
+            height: height,
         })
     }
 
@@ -73,6 +80,10 @@ impl Image {
 
     pub fn width(&self) -> usize {
         self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
     }
 
     pub fn to_rgb8(&self) -> Vec<u8> {
@@ -112,7 +123,7 @@ impl Image {
             return self;
         }
 
-        Image::from_rgb8(&self.to_rgb8(), image_type).unwrap()
+        Image::from_rgb8(&self.to_rgb8(), self.width, self.height, image_type).unwrap()
     }
 }
 
@@ -158,6 +169,7 @@ mod tests {
         0x12, 0x34, 0x56,
     ];
     const DATA_0_WIDTH: usize = 3;
+    const DATA_0_HEIGHT: usize = DATA_0_WIDTH;
 
     const DATA_0_R5G6B5: [u8; 18] = [
         0b000_00000, 0b11111_000,
@@ -203,37 +215,44 @@ mod tests {
 
     #[test]
     fn to_game_format() {
-        let image = Image::from_rgb8(&DATA_0, ImageType::R5G6B5).unwrap();
+        let image = Image::from_rgb8(&DATA_0, DATA_0_WIDTH, DATA_0_HEIGHT, ImageType::R5G6B5).unwrap();
 
         assert_eq!(image.width(), DATA_0_WIDTH);
+        assert_eq!(image.height(), DATA_0_HEIGHT);
         assert_eq!(image.into_inner(), DATA_0_R5G6B5);
 
-        let image = Image::from_rgb8(&DATA_0, ImageType::G1R5G5B5).unwrap();
+        let image = Image::from_rgb8(&DATA_0, DATA_0_WIDTH, DATA_0_HEIGHT, ImageType::G1R5G5B5).unwrap();
 
         assert_eq!(image.width(), DATA_0_WIDTH);
+        assert_eq!(image.height(), DATA_0_HEIGHT);
         assert_eq!(image.into_inner(), DATA_0_G1R5G5B5);
     }
 
     #[test]
     fn from_game_format() {
-        let image = Image::new(ImageType::R5G6B5, DATA_0_R5G6B5.to_vec()).unwrap();
+        let image = Image::new(ImageType::R5G6B5, DATA_0_WIDTH, DATA_0_HEIGHT, DATA_0_R5G6B5.to_vec()).unwrap();
         assert_eq!(image.width(), DATA_0_WIDTH);
+        assert_eq!(image.height(), DATA_0_HEIGHT);
         assert_eq!(&image.to_rgb8(), &DATA_0_CONVERSION_LOSS);
         
-        let image = Image::new(ImageType::G1R5G5B5, DATA_0_G1R5G5B5.to_vec()).unwrap();
+        let image = Image::new(ImageType::G1R5G5B5, DATA_0_WIDTH, DATA_0_HEIGHT, DATA_0_G1R5G5B5.to_vec()).unwrap();
         assert_eq!(image.width(), DATA_0_WIDTH);
+        assert_eq!(image.height(), DATA_0_HEIGHT);
         assert_eq!(&image.to_rgb8(), &DATA_0_CONVERSION_LOSS);
     }
 
     #[test]
     fn convert() {
-        let image = Image::new(ImageType::R5G6B5, DATA_0_R5G6B5.to_vec()).unwrap().convert_to(ImageType::R5G6B5);
+        let image = Image::new(ImageType::R5G6B5, DATA_0_WIDTH, DATA_0_HEIGHT, DATA_0_R5G6B5.to_vec())
+            .unwrap().convert_to(ImageType::R5G6B5);
         assert_eq!(image.into_inner(), &DATA_0_R5G6B5);
 
-        let image = Image::new(ImageType::R5G6B5, DATA_0_R5G6B5.to_vec()).unwrap().convert_to(ImageType::G1R5G5B5);
+        let image = Image::new(ImageType::R5G6B5, DATA_0_WIDTH, DATA_0_HEIGHT, DATA_0_R5G6B5.to_vec())
+            .unwrap().convert_to(ImageType::G1R5G5B5);
         assert_eq!(image.into_inner(), &DATA_0_G1R5G5B5);
 
-        let image = Image::new(ImageType::G1R5G5B5, DATA_0_G1R5G5B5.to_vec()).unwrap().convert_to(ImageType::R5G6B5);
+        let image = Image::new(ImageType::G1R5G5B5, DATA_0_WIDTH, DATA_0_HEIGHT, DATA_0_G1R5G5B5.to_vec())
+            .unwrap().convert_to(ImageType::R5G6B5);
         assert_eq!(image.into_inner(), &DATA_0_R5G6B5);
     }
 }

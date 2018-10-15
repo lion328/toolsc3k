@@ -90,6 +90,16 @@ fn main() -> Result<()> {
             )
             .subcommand(SubCommand::with_name("to-png")
                 .about("Convert game image to PNG format")
+                .arg(Arg::with_name("WIDTH")
+                    .help("The image's width")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("HEIGHT")
+                    .help("The image's height")
+                    .takes_value(true)
+                    .required(true)
+                )
                 .arg(Arg::with_name("INPUT")
                     .help("The input file")
                     .takes_value(true)
@@ -250,7 +260,9 @@ fn image(matches: &ArgMatches) -> Result<()> {
         ("to-png", Some(sub)) => image_to_png(
             sub.value_of("INPUT").unwrap(),
             sub.value_of("OUTPUT").unwrap(),
-            format
+            format,
+            usize::from_str_radix(sub.value_of("WIDTH").unwrap(), 10).map_err(|x| Error::OtherError(Box::new(x)))?,
+            usize::from_str_radix(sub.value_of("HEIGHT").unwrap(), 10).map_err(|x| Error::OtherError(Box::new(x)))?
         )?,
         ("from-png", Some(sub)) => image_from_png(
             sub.value_of("INPUT").unwrap(),
@@ -263,15 +275,15 @@ fn image(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn image_to_png(input: &str, output: &str, image_type: format::ImageType) -> Result<()> {
+fn image_to_png(input: &str, output: &str, image_type: format::ImageType, width: usize, height: usize) -> Result<()> {
     let raw = fs::read(input)?;
-    let image = format::Image::new(image_type, raw)?;
+    let image = format::Image::new(image_type, width, height, raw)?;
 
     image::save_buffer(
         output,
         &image.to_rgb8(),
         image.width() as u32,
-        image.width() as u32,
+        image.height() as u32,
         image::ColorType::RGB(8)
     )?;
 
@@ -279,13 +291,17 @@ fn image_to_png(input: &str, output: &str, image_type: format::ImageType) -> Res
 }
 
 fn image_from_png(input: &str, output: &str, image_type: format::ImageType) -> Result<()> {
+    let png = image::load(BufReader::new(File::open(input)?), image::ImageFormat::PNG)
+                .map_err(|x| Error::OtherError(Box::new(x)))?
+                .to_rgb();
+    let (width, height) = png.dimensions();
+
     fs::write(
         output,
         &format::Image::from_rgb8(
-            &image::load(BufReader::new(File::open(input)?), image::ImageFormat::PNG)
-                .map_err(|x| Error::OtherError(Box::new(x)))?
-                .to_rgb()
-                .into_raw(),
+            &png.into_raw(),
+            width as usize,
+            height as usize,
             image_type
         )?.into_inner()
     )?;
