@@ -77,7 +77,7 @@ impl RefPackCompression {
                     copy_len = 0;
                     stop_command = true;
                 },
-                _ => return Err(Error::RefPackCompression(format!("unknown control code: 0x{:X?}", b0)))
+                _ => unreachable!()
             }
 
             for _ in 0..append_len {
