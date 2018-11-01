@@ -21,6 +21,7 @@ impl PAKFile {
         let mut records = Vec::with_capacity(records_len);
 
         for _ in 0..records_len {
+            // TODO: Is this just a name or a file path?
             let name = Self::read_string(&mut stream)?;
             let offset = stream.read_u32::<LE>()? as usize;
 

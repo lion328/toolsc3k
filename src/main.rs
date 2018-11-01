@@ -128,6 +128,36 @@ fn main() -> Result<()> {
             )
             .setting(AppSettings::SubcommandRequired)
         )
+        .subcommand(SubCommand::with_name("pak")
+            .about("Command for dealing with PAK files")
+            .subcommand(SubCommand::with_name("extract")
+                .about("Extract a PAK file into directory")
+                .arg(Arg::with_name("INPUT")
+                    .help("The input file")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("OUTPUT")
+                    .help("The output path")
+                    .takes_value(true)
+                    .required(true)
+                )
+            )
+            .subcommand(SubCommand::with_name("reconstruct")
+                .about("Reconstruct a PAK file from directory")
+                .arg(Arg::with_name("INPUT")
+                    .help("The input path")
+                    .takes_value(true)
+                    .required(true)
+                )
+                .arg(Arg::with_name("OUTPUT")
+                    .help("The output file")
+                    .takes_value(true)
+                    .required(true)
+                )
+            )
+            .setting(AppSettings::SubcommandRequired)
+        )
         .setting(AppSettings::SubcommandRequired)
         .get_matches();
 
@@ -135,6 +165,7 @@ fn main() -> Result<()> {
         ("ixf", Some(sub)) => ixf(sub)?,
         ("refpack", Some(sub)) => refpack(sub)?,
         ("image", Some(sub)) => image(sub)?,
+        ("pak", Some(sub)) => pak(sub)?,
         _ => println!("Unknown subcommand")
     }
 
@@ -309,6 +340,37 @@ fn image_from_png(input: &str, output: &str, image_type: format::ImageType) -> R
     )?;
 
     Ok(())
+}
+
+fn pak(matches: &ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+        ("extract", Some(sub_m)) => pak_extract(
+            sub_m.value_of("INPUT").unwrap(),
+            sub_m.value_of("OUTPUT").unwrap()
+        )?,
+        ("reconstruct", Some(sub_m)) => pak_reconstruct(
+            sub_m.value_of("INPUT").unwrap(),
+            sub_m.value_of("OUTPUT").unwrap()
+        )?,
+        _ => println!("Unknown subcommand")
+    }
+
+    Ok(())
+}
+
+fn pak_extract(input: &str, output: &str) -> Result<()> {
+    let basepath = Path::new(output);
+    let pak = format::PAKFile::parse(&fs::read(input)?)?;
+
+    for record in pak.records.iter() {
+        fs::write(basepath.join(&record.name), record.as_single_string())?
+    }
+
+    Ok(())
+}
+
+fn pak_reconstruct(input: &str, output: &str) -> Result<()> {
+    unimplemented!()
 }
 
 fn dump_hex(data: &[u8]) -> String {
