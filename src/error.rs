@@ -6,6 +6,7 @@ pub enum Error {
     IXFFile(String),
     RefPackCompression(String),
     Image(String),
+    PAKFile(String),
     Other(String),
     OtherError(Box<StdError>),
 }
@@ -18,6 +19,7 @@ impl fmt::Display for Error {
             Error::IXFFile(ref s) => write!(f, "sc3k format error: {}", s),
             Error::RefPackCompression(ref s) => write!(f, "refpack compression error: {}", s),
             Error::Image(ref s) => write!(f, "image format error: {}", s),
+            Error::PAKFile(ref s) => write!(f, "pak format error: {}", s),
             Error::Other(ref s) => write!(f, "error: {}", s),
             Error::OtherError(ref e) => write!(f, "error: {}", e),
         }

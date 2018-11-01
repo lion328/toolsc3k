@@ -1,6 +1,8 @@
 extern crate byteorder;
 extern crate clap;
 extern crate image;
+#[macro_use]
+extern crate lazy_static;
 
 pub mod error;
 pub mod format;
