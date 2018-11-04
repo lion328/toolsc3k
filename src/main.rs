@@ -158,13 +158,22 @@ fn main() -> Result<()> {
             )
             .setting(AppSettings::SubcommandRequired)
         )
+        .arg(Arg::with_name("start-offset")
+            .help("Set offset of the first byte in hexadecimal to read in the input file")
+            .long("start-offset")
+            .takes_value(true)
+            .default_value("0")
+        )
         .setting(AppSettings::SubcommandRequired)
         .get_matches();
 
+    let start_offset = usize::from_str_radix(matches.value_of("start-offset").unwrap(), 16)
+        .map_err(|x| Error::OtherError(Box::new(x)))?;
+
     match matches.subcommand() {
         ("ixf", Some(sub)) => ixf(sub)?,
-        ("refpack", Some(sub)) => refpack(sub)?,
-        ("image", Some(sub)) => image(sub)?,
+        ("refpack", Some(sub)) => refpack(sub, start_offset)?,
+        ("image", Some(sub)) => image(sub, start_offset)?,
         ("pak", Some(sub)) => pak(sub)?,
         _ => println!("Unknown subcommand")
     }
@@ -255,11 +264,12 @@ fn ixf_reconstruct(input: &str, output: &str) -> Result<()> {
     Ok(())
 }
 
-fn refpack(matches: &ArgMatches) -> Result<()> {
+fn refpack(matches: &ArgMatches, start_offset: usize) -> Result<()> {
     match matches.subcommand() {
         ("uncompress", Some(sub_m)) => refpack_uncompress(
             sub_m.value_of("INPUT").unwrap(),
-            sub_m.value_of("OUTPUT").unwrap()
+            sub_m.value_of("OUTPUT").unwrap(),
+            start_offset
         )?,
         ("compress", Some(sub_m)) => refpack_compress(
             sub_m.value_of("INPUT").unwrap(),
@@ -271,8 +281,8 @@ fn refpack(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn refpack_uncompress(input: &str, output: &str) -> Result<()> {
-    fs::write(output, format::RefPackCompression::uncompress(&fs::read(input)?)?)?;
+fn refpack_uncompress(input: &str, output: &str, start_offset: usize) -> Result<()> {
+    fs::write(output, format::RefPackCompression::uncompress(&fs::read(input)?[start_offset..])?)?;
     Ok(())
 }
 
@@ -284,7 +294,7 @@ fn refpack_compress(input: &str, output: &str) -> Result<()> {
     Ok(())
 }
 
-fn image(matches: &ArgMatches) -> Result<()> {
+fn image(matches: &ArgMatches, start_offset: usize) -> Result<()> {
     let format = matches.value_of("type")
         .map(|s| format::ImageType::from_game_value(s.parse::<u32>().unwrap()).unwrap())
         .unwrap_or(format::ImageType::R5G6B5);
@@ -293,6 +303,7 @@ fn image(matches: &ArgMatches) -> Result<()> {
         ("to-png", Some(sub)) => image_to_png(
             sub.value_of("INPUT").unwrap(),
             sub.value_of("OUTPUT").unwrap(),
+            start_offset,
             format,
             usize::from_str_radix(sub.value_of("WIDTH").unwrap(), 10).map_err(|x| Error::OtherError(Box::new(x)))?,
             usize::from_str_radix(sub.value_of("HEIGHT").unwrap(), 10).map_err(|x| Error::OtherError(Box::new(x)))?
@@ -308,9 +319,10 @@ fn image(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn image_to_png(input: &str, output: &str, image_type: format::ImageType, width: usize, height: usize) -> Result<()> {
-    let raw = fs::read(input)?;
-    let image = format::Image::new(image_type, width, height, raw)?;
+fn image_to_png(input: &str, output: &str, start_offset: usize, image_type: format::ImageType, width: usize,
+    height: usize) -> Result<()> {
+    let raw = &fs::read(input)?[start_offset..];
+    let image = format::Image::new(image_type, width, height, raw.to_vec())?;
 
     image::save_buffer(
         output,
